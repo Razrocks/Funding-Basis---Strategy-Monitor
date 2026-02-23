@@ -2,7 +2,6 @@
 
 Cross-venue carry arbitrage dashboard for perpetual futures across Binance, Hyperliquid, and dYdX v4. Finds the best earn/hedge pairs after all costs, with live orderbook execution analysis. No API keys required for default read-only mode (public endpoints).
 
----
 
 ## What It Does
 
@@ -18,7 +17,7 @@ The system polls three venues every 30 seconds and computes:
 - **Quality Score** — Quality Score — 0-100, penalises funding volatility and extreme funding z-scores; optionally incorporates OI shocks where available.
 - **Trap Tags** — Funding spike, OI shock, Carry unstable, Basis inversion
 
----
+
 
 ## Quick Start
 
@@ -50,9 +49,9 @@ Opens at http://localhost:8501. Fetches live data from the FastAPI backend.
 pytest tests/ -v
 ```
 
----
 
-## Dashboard Tabs
+
+## Dashboard
 
 | Tab | Description |
 |-----|-------------|
@@ -61,7 +60,7 @@ pytest tests/ -v
 | **Execution** | Side-by-side live orderbook depth charts. Capacity summary table. |
 | **Events / Risk** | Real-time event stream (funding spikes, OI shocks, basis inversions). Severity/type/time filters. Venue health status. Assumptions table. |
 
----
+
 
 ## API Endpoints
 
@@ -78,9 +77,8 @@ GET /api/arb-leaderboard                  Ranked cross-venue arb opportunities
 
 Cross-venue endpoints accept `size`, `hold_days`, `min_edge`, and `funding_only` query params.
 
----
 
-## Key Assumptions
+## Assumptions
 
 | Parameter | Value |
 |-----------|-------|
@@ -94,7 +92,6 @@ Cross-venue endpoints accept `size`, `hold_days`, `min_edge`, and `funding_only`
 | Capacity threshold | 10 bps slippage |
 | Default position size | $25,000 (configurable via UI) |
 
----
 
 ## Known Data Gaps
 
@@ -104,7 +101,6 @@ Cross-venue endpoints accept `size`, `hold_days`, `min_edge`, and `funding_only`
 | Predicted funding | dYdX | nextFundingRate is predicted, not realized. |
 | Binance OI in base units | Binance | Multiplied by markPrice at fetch time for USD notional. |
 
----
 
 ## Data Retention
 
