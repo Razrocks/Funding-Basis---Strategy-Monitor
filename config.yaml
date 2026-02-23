@@ -1,0 +1,158 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Crypto Funding + Basis Carry Monitor — Configuration
+# All assumptions are explicit here; the UI surfaces them where relevant.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Polling cadence ───────────────────────────────────────────────────────────
+polling_interval_seconds: 30        # funding + mark/index + OI poll frequency
+orderbook_poll_seconds: 5           # orderbook depth poll frequency
+orderbook_depth: 20                 # number of levels each side to fetch
+
+# ── Venues ────────────────────────────────────────────────────────────────────
+venues:
+  binance:
+    enabled: true
+    base_url: "https://fapi.binance.com/fapi/v1"
+    funding_interval_seconds: 28800   # 8 hours (standard USDT-M)
+    taker_fee_bps: 4                  # 0.04% taker fee
+    maker_fee_bps: 2                  # 0.02% maker fee
+    markets:
+      - "BTCUSDT"
+      - "ETHUSDT"
+      - "SOLUSDT"
+      - "DOGEUSDT"
+      - "BNBUSDT"
+      - "XRPUSDT"
+      - "AVAXUSDT"
+      - "LINKUSDT"
+
+  hyperliquid:
+    enabled: true
+    base_url: "https://api.hyperliquid.xyz/info"
+    funding_interval_seconds: 3600    # 1 hour
+    taker_fee_bps: 2.5                # 0.025% taker fee
+    maker_fee_bps: 0.2                # 0.002% maker fee (often rebate)
+    markets:
+      - "BTC"
+      - "ETH"
+      - "SOL"
+      - "DOGE"
+      - "BNB"
+      - "XRP"
+      - "AVAX"
+      - "LINK"
+
+  dydx:
+    enabled: true
+    base_url: "https://indexer.dydx.trade/v4"
+    funding_interval_seconds: 3600    # 1 hour
+    taker_fee_bps: 5                  # 0.05% taker fee
+    maker_fee_bps: 1                  # 0.01% maker fee
+    markets:
+      - "BTC-USD"
+      - "ETH-USD"
+      - "SOL-USD"
+      - "DOGE-USD"
+      - "AVAX-USD"
+      - "LINK-USD"
+
+# ── Metrics assumptions ───────────────────────────────────────────────────────
+metrics:
+  # Basis annualisation horizon — basis is assumed to decay to 0 over this window.
+  # Default 1 day (86400s). Increase to 7d (604800s) for a more conservative estimate.
+  basis_horizon_seconds: 86400
+
+  # Rolling window sizes (in hours) for volatility and z-score calculations
+  rolling_windows:
+    short_hours: 24
+    medium_hours: 168     # 7 days
+    long_hours: 720       # 30 days
+
+  # Z-score lookback (days). Use 30d if history available, else fall back to 7d.
+  zscore_window_days: 30
+  zscore_fallback_days: 7
+
+  # Carry Quality Score component weights (must sum to 1.0)
+  carry_quality_weights:
+    funding_stability: 0.35    # low funding vol = high quality
+    basis_stability: 0.25      # low basis vol = high quality
+    oi_stability: 0.20         # stable OI = high quality
+    zscore_penalty: 0.20       # high z-score = likely to mean-revert = lower quality
+
+  # Assumed hold period for amortising entry/exit costs (days)
+  assumed_hold_days: 30
+
+# ── Execution simulation ──────────────────────────────────────────────────────
+execution:
+  # USD notional size grid for the net-carry-vs-size curve
+  size_grid_usd:
+    - 1000
+    - 5000
+    - 10000
+    - 25000
+    - 50000
+    - 100000
+
+  # Maximum slippage to tolerate when simulating fills (bps)
+  max_slippage_bps: 50
+
+  # Round-trip multiplier: 2 = entry + exit fees
+  round_trip_fee_multiplier: 2
+
+  # Slippage tiers for capacity calculation
+  capacity_tiers_bps:
+    - 5
+    - 10
+    - 25
+
+# ── Borrow rates (USDT) ───────────────────────────────────────────────────────
+# Used in net carry calculation. Default 0. Override per asset if borrowing to fund margin.
+borrow_rates:
+  default_apr: 0.0      # 0% — most perp desks use exchange margin, no borrow cost
+  # asset-specific overrides (example):
+  # BTC: 0.02   # 2% APR if borrowing BTC for spot leg of a delta-neutral strategy
+
+# ── Storage ───────────────────────────────────────────────────────────────────
+storage:
+  db_path: "./data/monitor.db"
+  full_resolution_ttl_hours: 24     # keep 30s-cadence rows for 24h
+  downsample_interval_minutes: 60   # after TTL, aggregate to 1 row/hour
+  derived_metrics_ttl_days: 7
+  events_ttl_days: 30
+
+# ── Event thresholds ──────────────────────────────────────────────────────────
+events:
+  # Tag "Funding spike" if |funding_apr| annualised exceeds this (in decimal, not bps)
+  funding_spike_threshold: 2.00      # 200% APR
+
+  # Tag "Basis inversion" if basis < this threshold (in decimal)
+  basis_inversion_threshold: -0.001  # -0.1% basis
+
+  # Tag "OI shock" if abs OI change exceeds this percent in 1 hour
+  oi_change_1h_threshold_pct: 20
+
+  # Tag "Carry unstable" if carry_vol_24h > this multiple of carry_mean
+  carry_vol_threshold_cv: 0.5        # coefficient of variation
+
+  # Funding z-score threshold for "Crowded" tag
+  crowded_z_threshold: 2.0
+
+  severity_levels:
+    - "info"
+    - "warning"
+    - "critical"
+
+# ── FastAPI server ────────────────────────────────────────────────────────────
+api:
+  host: "0.0.0.0"
+  port: 8000
+  cors_origins:
+    - "http://localhost:8501"   # Streamlit default port
+    - "http://127.0.0.1:8501"
+
+# ── Screening thresholds (Page 5) ────────────────────────────────────────────
+screening:
+  min_net_carry_apr: 0.05       # 5% minimum net carry to be listed
+  min_quality_score: 40         # minimum carry quality score (0-100)
+  min_capacity_10bps_usd: 5000  # minimum $5k capacity at 10bps
+  max_trap_tags: 2              # auto-flag if 3+ trap tags
